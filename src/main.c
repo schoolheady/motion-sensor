@@ -88,6 +88,43 @@ static void handle_mpu6050_drdy(const struct device *dev,
 }
 #endif /* CONFIG_MPU6050_TRIGGER */
 
+float x_calibrated = 0;
+float y_calibrated = 0;
+float z_calibrated = 0;
+float x_raw = 0;
+float y_raw = 0;
+float z_raw = 0;
+float x_offset = 0;
+float y_offset = 0;
+float z_offset = 0;
+
+float *xyz_raw_matrix = malloc(sizeof(float) * 18);
+int calibration_side = 0;
+int get_raw(bool next){
+
+	// collect first 3 
+	while(!next){
+		for(int i = 0; i < calibration_side + 3; i++){
+			
+		}
+
+	}
+
+}
+
+int calculate_offset(){
+
+ 
+
+
+	return 0;
+}
+
+int calibrate_accelerometer(){
+
+	return 0;
+}
+
 int main(void)
 {
 	const struct device *const mpu6050 = DEVICE_DT_GET_ONE(invensense_mpu6050);
@@ -116,7 +153,7 @@ int main(void)
 		if (rc != 0) {
 			break;
 		}
-		k_sleep(K_MSEC(200));
+		k_sleep(K_MSEC(9));
 	}
 
 	/* triggered runs with its own thread after exit */
