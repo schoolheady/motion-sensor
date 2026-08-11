@@ -14,57 +14,8 @@
 #include "uart_controll.h"
 #define STACKSIZE 1024
 #define PRIORITY 7
-// #define UART_DEVICE_NODE DT_NODELABEL(uart0)
-// #define MSG_SIZE 32
-// /* queue to store up to 10 messages (aligned to 4-byte boundary) */
-// K_MSGQ_DEFINE(uart_msgq, MSG_SIZE, 10, 4);
-
-// static const struct device *const uart_dev = DEVICE_DT_GET(UART_DEVICE_NODE);
-// /* receive buffer used in UART ISR callback */
-// static char rx_buf[MSG_SIZE];
-// static int rx_buf_pos;
-
-
-// void serial_cb(const struct device *dev, void *user_data)
-// {
-// 	uint8_t c;
-
-// 	uart_irq_update(uart_dev);
-
-// 	if (uart_irq_rx_ready(uart_dev) <= 0) {
-// 		return;
-// 	}
-
-// 	/* read until FIFO empty */
-// 	while (uart_fifo_read(uart_dev, &c, 1) == 1) {
-// 		if ((c == '\n' || c == '\r') && rx_buf_pos > 0) {
-// 			/* terminate string */
-// 			rx_buf[rx_buf_pos] = '\0';
-
-// 			/* if queue is full, message is silently dropped */
-// 			k_msgq_put(&uart_msgq, &rx_buf, K_NO_WAIT);
-
-// 			/* reset the buffer (it was copied to the msgq) */
-// 			rx_buf_pos = 0;
-// 		} else if (rx_buf_pos < (sizeof(rx_buf) - 1)) {
-// 			rx_buf[rx_buf_pos++] = c;
-// 		}
-// 		/* else: characters beyond buffer size are dropped */
-// 	}
-// }
-
-
-// /*
-//  * Print a null-terminated string character by character to the UART interface
-//  */
-// void print_uart(char *buf)
-// {
-// 	int msg_len = strlen(buf);
-
-// 	for (int i = 0; i < msg_len; i++) {
-// 		uart_poll_out(uart_dev, buf[i]);
-// 	}
-// }
+#define PRIORITY_MPU6050 7
+#define PRIORITY_UART 6
 
 static const char *now_str(void)
 {
@@ -191,28 +142,26 @@ float z_offset = 0;
 // }
 
 
-void gg( )
+void read_uart()
 {
-	const struct device *const mpu6050 = DEVICE_DT_GET_ONE(invensense_mpu6050);
 
-	if (!device_is_ready(mpu6050)) {
-		printk("Device %s is not ready\n", mpu6050->name);
-		return;
-	}
 	// if (!device_is_ready(uart_dev)) {
 	// 	printk("UART device not found!");
 	// 	return 0;
 	// }
+	initialize_uart();
 	char *command = malloc(sizeof(char)*32); 	
+	
 	while(1){
 		// calibrate data
-
 		command = get_data();
 		if(command[0] > 0){
 			
 			printk("goo: %c",command[0]);
 			memset(command, 0, sizeof(command));
-			
+			if(command[0] == 'n'){ // if n calibrate the next side
+
+			}			
 			
 		}
 
@@ -223,35 +172,43 @@ void gg( )
 
 	
 
+}
+void read_mpu6050(){
+	const struct device *const mpu6050 = DEVICE_DT_GET_ONE(invensense_mpu6050);
 
+	if (!device_is_ready(mpu6050)) {
+		printk("Device %s is not ready\n", mpu6050->name);
+		return;
+	}
 
-// #ifdef CONFIG_MPU6050_TRIGGER
-// 	trigger = (struct sensor_trigger) {
-// 		.type = SENSOR_TRIG_DATA_READY,
-// 		.chan = SENSOR_CHAN_ALL,
-// 	};
-// 	if (sensor_trigger_set(mpu6050, &trigger,
-// 			       handle_mpu6050_drdy) < 0) {
-// 		printf("Cannot configure trigger\n");
-// 		return 0;
-// 	}
-// 	printk("Configured for triggered sampling.\n");
-// #endif
+#ifdef CONFIG_MPU6050_TRIGGER
+	trigger = (struct sensor_trigger) {
+		.type = SENSOR_TRIG_DATA_READY,
+		.chan = SENSOR_CHAN_ALL,
+	};
+	if (sensor_trigger_set(mpu6050, &trigger,
+			       handle_mpu6050_drdy) < 0) {
+		printf("Cannot configure trigger\n");
+		return 0;
+	}
+	printk("Configured for triggered sampling.\n");
+#endif
 
-// 	while (!IS_ENABLED(CONFIG_MPU6050_TRIGGER)) {
-// 		int rc = process_mpu6050(mpu6050);
+	while (!IS_ENABLED(CONFIG_MPU6050_TRIGGER)) {
+		int rc = process_mpu6050(mpu6050);
 
-// 		if (rc != 0) {
-// 			break;
-// 		}
-// 		k_sleep(K_MSEC(9));
-// 	}
+		if (rc != 0) {
+			break;
+		}
+		k_sleep(K_MSEC(9));
+	}
 
 	/* triggered runs with its own thread after exit */
 }
 
-K_THREAD_DEFINE(initialize_uart_id, STACKSIZE, initialize_uart, NULL, NULL, NULL,
-		PRIORITY, 0, 0);
+K_THREAD_DEFINE(read_mpu6050_id, STACKSIZE, read_mpu6050, NULL, NULL, NULL,
+		PRIORITY_MPU6050, 0, 0);
 
-K_THREAD_DEFINE(gg_id, STACKSIZE, gg, NULL, NULL, NULL,
-		PRIORITY, 0, 0);
+
+K_THREAD_DEFINE(read_uart_id, STACKSIZE, read_uart, NULL, NULL, NULL,
+		PRIORITY_UART, 0, 0);

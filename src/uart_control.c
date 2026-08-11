@@ -53,7 +53,6 @@ int print_uart(char *buf){
 }
 
 int initialize_uart(){
-    char tx_buf[MSG_SIZE];
 	if (!device_is_ready(uart_dev)) {
 		printk("UART device not found!");
 		return 0;
@@ -71,11 +70,6 @@ int initialize_uart(){
 		return 0;
 	}
 	uart_irq_rx_enable(uart_dev);
-	while (k_msgq_get(&uart_msgq, &tx_buf, K_FOREVER) == 0) {
-
-        k_sleep(K_MSEC(9));
-	}
-
     
 }
 
