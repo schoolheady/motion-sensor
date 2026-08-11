@@ -9,6 +9,63 @@
 #include <zephyr/drivers/sensor.h>
 #include <stdio.h>
 
+#include <zephyr/device.h>
+#include <zephyr/drivers/uart.h>
+#include "uart_controll.h"
+#define STACKSIZE 1024
+#define PRIORITY 7
+// #define UART_DEVICE_NODE DT_NODELABEL(uart0)
+// #define MSG_SIZE 32
+// /* queue to store up to 10 messages (aligned to 4-byte boundary) */
+// K_MSGQ_DEFINE(uart_msgq, MSG_SIZE, 10, 4);
+
+// static const struct device *const uart_dev = DEVICE_DT_GET(UART_DEVICE_NODE);
+// /* receive buffer used in UART ISR callback */
+// static char rx_buf[MSG_SIZE];
+// static int rx_buf_pos;
+
+
+// void serial_cb(const struct device *dev, void *user_data)
+// {
+// 	uint8_t c;
+
+// 	uart_irq_update(uart_dev);
+
+// 	if (uart_irq_rx_ready(uart_dev) <= 0) {
+// 		return;
+// 	}
+
+// 	/* read until FIFO empty */
+// 	while (uart_fifo_read(uart_dev, &c, 1) == 1) {
+// 		if ((c == '\n' || c == '\r') && rx_buf_pos > 0) {
+// 			/* terminate string */
+// 			rx_buf[rx_buf_pos] = '\0';
+
+// 			/* if queue is full, message is silently dropped */
+// 			k_msgq_put(&uart_msgq, &rx_buf, K_NO_WAIT);
+
+// 			/* reset the buffer (it was copied to the msgq) */
+// 			rx_buf_pos = 0;
+// 		} else if (rx_buf_pos < (sizeof(rx_buf) - 1)) {
+// 			rx_buf[rx_buf_pos++] = c;
+// 		}
+// 		/* else: characters beyond buffer size are dropped */
+// 	}
+// }
+
+
+// /*
+//  * Print a null-terminated string character by character to the UART interface
+//  */
+// void print_uart(char *buf)
+// {
+// 	int msg_len = strlen(buf);
+
+// 	for (int i = 0; i < msg_len; i++) {
+// 		uart_poll_out(uart_dev, buf[i]);
+// 	}
+// }
+
 static const char *now_str(void)
 {
 	static char buf[16]; /* ...HH:MM:SS.MMM */
@@ -98,64 +155,103 @@ float x_offset = 0;
 float y_offset = 0;
 float z_offset = 0;
 
-float *xyz_raw_matrix = malloc(sizeof(float) * 18);
-int calibration_side = 0;
-int get_raw(bool next){
+// float *xyz_raw_matrix = malloc(sizeof(float) * 18);
+// int start_array = 0;
+// bool next = false;
+// int get_raw_3(){
 
-	// collect first 3 
-	while(!next){
-		for(int i = 0; i < calibration_side + 3; i++){
-			
-		}
+// 	// collect first 3 
+// 	while(!next){
+		
+// 		xyz_raw_matrix[start_array]  
+// 		xyz_raw_matrix[start_array + 1]  
+// 		xyz_raw_matrix[start_array + 2]  
+		
+// 	}
+// 	// next 3 values
+// 	start_array = start_array + 3;
 
-	}
+// }
+// int get_all_raw(){
+// 	get_raw_3();
 
-}
+// }
 
-int calculate_offset(){
+// int calculate_offset(){
 
  
 
 
-	return 0;
-}
+// 	return 0;
+// }
 
-int calibrate_accelerometer(){
+// int calibrate_accelerometer(){
 
-	return 0;
-}
+// 	return 0;
+// }
 
-int main(void)
+
+void gg( )
 {
 	const struct device *const mpu6050 = DEVICE_DT_GET_ONE(invensense_mpu6050);
 
 	if (!device_is_ready(mpu6050)) {
 		printk("Device %s is not ready\n", mpu6050->name);
-		return 0;
+		return;
 	}
+	// if (!device_is_ready(uart_dev)) {
+	// 	printk("UART device not found!");
+	// 	return 0;
+	// }
+	char *command = malloc(sizeof(char)*32); 	
+	while(1){
+		// calibrate data
 
-#ifdef CONFIG_MPU6050_TRIGGER
-	trigger = (struct sensor_trigger) {
-		.type = SENSOR_TRIG_DATA_READY,
-		.chan = SENSOR_CHAN_ALL,
-	};
-	if (sensor_trigger_set(mpu6050, &trigger,
-			       handle_mpu6050_drdy) < 0) {
-		printf("Cannot configure trigger\n");
-		return 0;
-	}
-	printk("Configured for triggered sampling.\n");
-#endif
-
-	while (!IS_ENABLED(CONFIG_MPU6050_TRIGGER)) {
-		int rc = process_mpu6050(mpu6050);
-
-		if (rc != 0) {
-			break;
+		command = get_data();
+		if(command[0] > 0){
+			
+			printk("goo: %c",command[0]);
+			memset(command, 0, sizeof(command));
+			
+			
 		}
-		k_sleep(K_MSEC(9));
+
 	}
+
+	free(command);
+
+
+	
+
+
+
+// #ifdef CONFIG_MPU6050_TRIGGER
+// 	trigger = (struct sensor_trigger) {
+// 		.type = SENSOR_TRIG_DATA_READY,
+// 		.chan = SENSOR_CHAN_ALL,
+// 	};
+// 	if (sensor_trigger_set(mpu6050, &trigger,
+// 			       handle_mpu6050_drdy) < 0) {
+// 		printf("Cannot configure trigger\n");
+// 		return 0;
+// 	}
+// 	printk("Configured for triggered sampling.\n");
+// #endif
+
+// 	while (!IS_ENABLED(CONFIG_MPU6050_TRIGGER)) {
+// 		int rc = process_mpu6050(mpu6050);
+
+// 		if (rc != 0) {
+// 			break;
+// 		}
+// 		k_sleep(K_MSEC(9));
+// 	}
 
 	/* triggered runs with its own thread after exit */
-	return 0;
 }
+
+K_THREAD_DEFINE(initialize_uart_id, STACKSIZE, initialize_uart, NULL, NULL, NULL,
+		PRIORITY, 0, 0);
+
+K_THREAD_DEFINE(gg_id, STACKSIZE, gg, NULL, NULL, NULL,
+		PRIORITY, 0, 0);
