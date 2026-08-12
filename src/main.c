@@ -13,10 +13,20 @@
 #include <zephyr/drivers/uart.h>
 #include "uart_controll.h"
 #define STACKSIZE 1024
+#define STACKSIZE_MPU 2048
 #define PRIORITY 7
 #define PRIORITY_MPU6050 7
 #define PRIORITY_UART 6
 
+K_MUTEX_DEFINE(my_mutex);
+
+static struct accelerometer{
+	float x;
+	float y;
+	float z;
+};	
+
+static struct accelerometer accel;
 static const char *now_str(void)
 {
 	static char buf[16]; /* ...HH:MM:SS.MMM */
@@ -41,13 +51,13 @@ static const char *now_str(void)
 static int process_mpu6050(const struct device *dev)
 {
 	struct sensor_value temperature;
-	struct sensor_value accel[3];
+	struct sensor_value s_accel[3];
 	struct sensor_value gyro[3];
 	int rc = sensor_sample_fetch(dev);
 
 	if (rc == 0) {
 		rc = sensor_channel_get(dev, SENSOR_CHAN_ACCEL_XYZ,
-					accel);
+					s_accel);
 	}
 	if (rc == 0) {
 		rc = sensor_channel_get(dev, SENSOR_CHAN_GYRO_XYZ,
@@ -58,10 +68,14 @@ static int process_mpu6050(const struct device *dev)
 					&temperature);
 	}
 	if (rc == 0) {
+		accel.x = sensor_value_to_double(&s_accel[0]);
+		accel.y = sensor_value_to_double(&s_accel[1]);
+		accel.z = sensor_value_to_double(&s_accel[2]);
 		printk("[ACCEL] - [%f] [%f] [%f] m/s\n",
-		sensor_value_to_double(&accel[0]),
-		sensor_value_to_double(&accel[1]),
-		sensor_value_to_double(&accel[2]));
+		accel.x,
+		accel.y,
+		accel.z);
+		
 		// printk("[%s]:%g Cel\n"
 		//        "  accel %f %f %f m/s/s\n"
 		//        "  gyro  %f %f %f rad/s\n",
@@ -105,28 +119,95 @@ float z_raw = 0;
 float x_offset = 0;
 float y_offset = 0;
 float z_offset = 0;
+float x_scale  = 0;
+float y_scale  = 0;
+float z_scale  = 0;
 
-// float *xyz_raw_matrix = malloc(sizeof(float) * 18);
-// int start_array = 0;
-// bool next = false;
-// int get_raw_3(){
+float *xyz_raw_matrix = NULL;
+int start_array = 0;
+bool static next = false;
 
-// 	// collect first 3 
-// 	while(!next){
+int initialize_flash(){
+
+
+	return 0;
+}
+
+// store calibration
+int store_calibrations(){
+
+
+}
+// get calibration
+
+void get_raw_3(){
+	printk("INIT get_raw\n");
+	xyz_raw_matrix = malloc(sizeof(float) * 18);
+	// collect first 3 
+	while(start_array < 18){
+		printk("start_index: %d", start_array);
+		while(1){
+			
+			xyz_raw_matrix[start_array] 	= accel.x;  
+			xyz_raw_matrix[start_array + 1] = accel.y; 
+			xyz_raw_matrix[start_array + 2] = accel.z; 
+
+			k_mutex_lock(&my_mutex, K_FOREVER);
+			//printk("next %d", next);
+			if(next == true){
+				next = false;
+				break;
+			}
+			k_mutex_unlock(&my_mutex);
+			
+		}
 		
-// 		xyz_raw_matrix[start_array]  
-// 		xyz_raw_matrix[start_array + 1]  
-// 		xyz_raw_matrix[start_array + 2]  
-		
-// 	}
-// 	// next 3 values
-// 	start_array = start_array + 3;
+		start_array = start_array + 3;
+	}
+	printk("------------- uncalibrated -------------------\n");
+	for(int i = 0; i < 18; i = i + 3){
+		printk("[%f] [%f] [%f]\n",xyz_raw_matrix[i]
+								,xyz_raw_matrix[i + 1]
+								,xyz_raw_matrix[i + 2]);
+	}
 
-// }
-// int get_all_raw(){
-// 	get_raw_3();
+}
 
-// }
+int calibration(){
+	printk("entering calibration");
+	get_raw_3();
+
+	// check if 0
+	int check[6] = {0 , 4, 8, 9, 13 ,17};
+	for(int i = 0 ; i < 6; i++){
+		int val_xyz = xyz_raw_matrix[check[i]];
+		if(val_xyz == 0){
+			xyz_raw_matrix[check[i]] = 0.0000001;
+		}
+
+	}
+
+	float Xxup   = xyz_raw_matrix[0];
+	float Yyup   = xyz_raw_matrix[4];
+	float Zzup 	 = xyz_raw_matrix[8];
+	float Xxdown = xyz_raw_matrix[9];
+	float Yydown = xyz_raw_matrix[13];
+	float Zzdown = xyz_raw_matrix[17];
+
+	x_offset = -((Xxup + Xxdown ) / (Xxup - Xxdown ));
+	y_offset = -((Yyup + Yydown ) / (Yyup - Yydown ));
+	z_offset = -((Zzup + Zzdown ) / (Zzup - Zzdown ));
+	x_scale = 2 / (Xxup - Xxdown);
+	y_scale = 2 / (Yyup - Yydown);
+	z_scale = 2 / (Zzup - Zzdown);
+	printk("------------- calibrated -------------------\n");
+		for(int i = 0; i < 18; i = i + 3){
+		printk("[%f] [%f] [%f]\n",xyz_raw_matrix[i]    * x_scale + x_offset
+								,xyz_raw_matrix[i + 1] * y_scale + y_offset
+								,xyz_raw_matrix[i + 2] * z_scale + y_offset
+							); 
+	}
+}
 
 // int calculate_offset(){
 
@@ -144,7 +225,6 @@ float z_offset = 0;
 
 void read_uart()
 {
-
 	// if (!device_is_ready(uart_dev)) {
 	// 	printk("UART device not found!");
 	// 	return 0;
@@ -157,12 +237,13 @@ void read_uart()
 		command = get_data();
 		if(command[0] > 0){
 			
-			printk("goo: %c",command[0]);
-			memset(command, 0, sizeof(command));
 			if(command[0] == 'n'){ // if n calibrate the next side
-
-			}			
-			
+				//printk("next\n");
+				next = true;
+				
+			}	
+					
+			memset(command, 0, sizeof(char)*32);
 		}
 
 	}
@@ -174,6 +255,7 @@ void read_uart()
 
 }
 void read_mpu6050(){
+	printk("INIT MPU\n");
 	const struct device *const mpu6050 = DEVICE_DT_GET_ONE(invensense_mpu6050);
 
 	if (!device_is_ready(mpu6050)) {
@@ -196,8 +278,10 @@ void read_mpu6050(){
 
 	while (!IS_ENABLED(CONFIG_MPU6050_TRIGGER)) {
 		int rc = process_mpu6050(mpu6050);
+		
 
 		if (rc != 0) {
+			printk("ERR");
 			break;
 		}
 		k_sleep(K_MSEC(9));
@@ -206,9 +290,13 @@ void read_mpu6050(){
 	/* triggered runs with its own thread after exit */
 }
 
-K_THREAD_DEFINE(read_mpu6050_id, STACKSIZE, read_mpu6050, NULL, NULL, NULL,
-		PRIORITY_MPU6050, 0, 0);
 
+
+K_THREAD_DEFINE(calibration_id, STACKSIZE_MPU, calibration, NULL, NULL, NULL,
+		PRIORITY_UART, K_FP_REGS, 0); // Added K_FP_REGS here
+
+K_THREAD_DEFINE(read_mpu6050_id, STACKSIZE_MPU, read_mpu6050, NULL, NULL, NULL,
+		PRIORITY_UART, K_FP_REGS, 0);
 
 K_THREAD_DEFINE(read_uart_id, STACKSIZE, read_uart, NULL, NULL, NULL,
 		PRIORITY_UART, 0, 0);

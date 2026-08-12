@@ -35,7 +35,7 @@ void serial_cb(const struct device *dev, void *user_data)
 
 			/* reset the buffer (it was copied to the msgq) */
 			rx_buf_pos = 0;
-            printk("Received");
+        
 		} else if (rx_buf_pos < (sizeof(rx_buf) - 1)) {
 			rx_buf[rx_buf_pos++] = c;
 		}
