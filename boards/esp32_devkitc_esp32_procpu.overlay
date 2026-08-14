@@ -7,3 +7,10 @@
 		status = "okay";
 	};
 };
+&flash0 {
+	status = "okay";
+};
+
+&storage_partition {
+	status = "okay";
+};
