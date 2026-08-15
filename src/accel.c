@@ -15,6 +15,9 @@
 
 #define SAMPLE_INTERVAL_MS 9
 
+/* SENSOR_G is one g expressed in micro-m/s/s. */
+#define ACCEL_MS2_PER_G ((float)SENSOR_G / 1000000.0f)
+
 static const struct device *const accel_dev =
 	DEVICE_DT_GET_ONE(invensense_mpu6050);
 
@@ -49,6 +52,11 @@ int accel_get_latest(struct accel_sample *out)
 	return rc;
 }
 
+static float to_g(const struct sensor_value *v)
+{
+	return (float)sensor_value_to_double(v) / ACCEL_MS2_PER_G;
+}
+
 static int process_sample(const struct device *dev)
 {
 	struct sensor_value accel[3];
@@ -72,12 +80,12 @@ static int process_sample(const struct device *dev)
 		return rc;
 	}
 
-	s.x = (float)sensor_value_to_double(&accel[0]);
-	s.y = (float)sensor_value_to_double(&accel[1]);
-	s.z = (float)sensor_value_to_double(&accel[2]);
+	s.x = to_g(&accel[0]);
+	s.y = to_g(&accel[1]);
+	s.z = to_g(&accel[2]);
 	publish(&s);
 
-	printk("[ACCEL] - [%f] [%f] [%f] m/s\n",
+	printk("[ACCEL] - [%f] [%f] [%f] g\n",
 	       (double)s.x, (double)s.y, (double)s.z);
 
 	return 0;

@@ -30,4 +30,19 @@ int calibration_run(struct accel_calibration *out);
  */
 void calibration_advance(void);
 
+/* Non-zero once a calibration is in force, from either calibration_run()
+ * or set_calibration().
+ */
+int get_calibration(void);
+
+/* Seed the active calibration from stored values instead of running the
+ * six-point routine. Returns 0 on success.
+ */
+int set_calibration(struct accel_calibration *out);
+
+/* Print the latest sample with the active calibration applied.
+ * Returns -EAGAIN if nothing is calibrated yet or no sample has arrived.
+ */
+int get_calibrated_values(void);
+
 #endif /* CALIBRATION_H_ */

@@ -19,6 +19,11 @@
 #define PRIORITY_MPU6050 7
 #define PRIORITY_UART    6
 
+
+static void check_calibration(){
+
+}
+
 static void accel_thread(void *p1, void *p2, void *p3)
 {
 	ARG_UNUSED(p1);
@@ -56,6 +61,13 @@ static void calibration_thread(void *p1, void *p2, void *p3)
 		printk("calibration: not persisted, values are lost on reset\n");
 	} else if (rc != 0) {
 		printk("calibration: store failed: %d\n", rc);
+	}
+
+	if(get_calibration()){
+		while(1){
+			get_calibrated_values();
+		}
+
 	}
 }
 

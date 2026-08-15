@@ -13,7 +13,12 @@
  * objects are linked into the same image.
  */
 
-/* One acceleration reading, in the units the driver reports (m/s/s). */
+/*
+ * One acceleration reading, in g (1 g = 9.80665 m/s/s). The driver reports
+ * m/s/s; accel.c converts on the way in so that a calibration scale factor
+ * comes out near 1.0 and an offset near 0.0, i.e. the deviation from ideal is
+ * the sensor error itself rather than a unit conversion folded in with it.
+ */
 struct accel_sample {
 	float x;
 	float y;

@@ -28,6 +28,15 @@ static K_SEM_DEFINE(orientation_sem, 0, 1);
  */
 static float raw[CAL_ORIENTATIONS][CAL_AXES];
 
+/*
+ * The calibration currently in force. calibration_run() writes to the caller's
+ * struct, but that lives on calibration_thread's stack and dies with it, so a
+ * file-scope copy is what later reads actually use.
+ */
+static struct accel_calibration active;
+static bool calibrated = false;
+
+
 static const char *const orientation_name[CAL_ORIENTATIONS] = {
 	"+X up", "+Y up", "+Z up", "-X up", "-Y up", "-Z up",
 };
@@ -36,7 +45,10 @@ void calibration_advance(void)
 {
 	k_sem_give(&orientation_sem);
 }
-
+int get_calibration(void)
+{
+	return calibrated;
+}
 /* Apply a calibration to a sample in place. */
 static void calibration_apply(const struct accel_calibration *cal,
 			      struct accel_sample *s)
@@ -130,6 +142,12 @@ int calibration_run(struct accel_calibration *out)
 		}
 	}
 
+	/*
+	 * Samples arrive in g, so a healthy axis reads about +1 up and -1 down
+	 * and the 2.0f below is that expected 2 g span. Scale therefore lands
+	 * near 1.0 and offset near 0.0; how far each strays is the sensor's own
+	 * sensitivity error and zero-g bias, both in g.
+	 */
 	for (int axis = 0; axis < CAL_AXES; axis++) {
 		float up = raw[axis][axis];
 		float down = raw[axis + CAL_AXES][axis];
@@ -137,8 +155,48 @@ int calibration_run(struct accel_calibration *out)
 		out->offset[axis] = -((up + down) / (up - down));
 		out->scale[axis] = 2.0f / (up - down);
 	}
-
+	active = *out;
+	calibrated = true;
 	print_table("calibrated", out);
+
+	return 0;
+}
+
+// when eeprom is not empty this has to run to get and set the calibration values
+int set_calibration(struct accel_calibration *out)
+{
+	/* TODO: placeholders until storage_load_calibration() exists. */
+	const float scale[CAL_AXES]  = {1.0f, 1.0f, 1.0f};
+	const float offset[CAL_AXES] = {0.0f, 0.0f, 0.0f};
+
+	/* Arrays are not assignable in C; copy element-wise. */
+	for (int i = 0; i < CAL_AXES; i++) {
+		out->offset[i] = offset[i];
+		out->scale[i] = scale[i];
+	}
+
+	active = *out;
+	calibrated = true;
+
+	return 0;
+}
+
+int get_calibrated_values(void)
+{
+	struct accel_sample s;
+	int rc;
+
+	if (!get_calibration()) {
+		return -EAGAIN;
+	}
+
+	rc = accel_get_latest(&s);
+	if (rc != 0) {
+		return rc;
+	}
+
+	calibration_apply(&active, &s);
+	printk("[CAL] [%f] [%f] [%f] g\n", (double)s.x, (double)s.y, (double)s.z);
 
 	return 0;
 }
