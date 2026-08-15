@@ -85,9 +85,6 @@ static int process_sample(const struct device *dev)
 	s.z = to_g(&accel[2]);
 	publish(&s);
 
-	printk("[ACCEL] - [%f] [%f] [%f] g\n",
-	       (double)s.x, (double)s.y, (double)s.z);
-
 	return 0;
 }
 

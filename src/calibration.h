@@ -7,6 +7,8 @@
 #ifndef CALIBRATION_H_
 #define CALIBRATION_H_
 
+#include "accel.h"
+
 #define CAL_AXES         3
 #define CAL_ORIENTATIONS 6
 
@@ -30,19 +32,27 @@ int calibration_run(struct accel_calibration *out);
  */
 void calibration_advance(void);
 
+/* Ask for a (re)calibration. Safe to call from another thread; this is what
+ * the operator's calibrate command and the empty-flash boot path both use.
+ */
+void calibration_request(void);
+
+/* Block until calibration_request() is called. */
+void calibration_wait(void);
+
 /* Non-zero once a calibration is in force, from either calibration_run()
  * or set_calibration().
  */
 int get_calibration(void);
 
-/* Seed the active calibration from stored values instead of running the
- * six-point routine. Returns 0 on success.
+/* Adopt a calibration loaded from flash instead of running the six-point
+ * routine. Returns 0 on success.
  */
-int set_calibration(struct accel_calibration *out);
+int set_calibration(const struct accel_calibration *cal);
 
-/* Print the latest sample with the active calibration applied.
- * Returns -EAGAIN if nothing is calibrated yet or no sample has arrived.
+/* Correct *s in place using the active calibration.
+ * Returns 0, or -EAGAIN if nothing is calibrated yet (s is left untouched).
  */
-int get_calibrated_values(void);
+int calibration_apply_active(struct accel_sample *s);
 
 #endif /* CALIBRATION_H_ */

@@ -6,7 +6,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
-#include <errno.h>
+#include <stdbool.h>
 
 #include "accel.h"
 #include "calibration.h"
@@ -19,16 +19,17 @@
 #define PRIORITY_MPU6050 7
 #define PRIORITY_UART    6
 
+/* Console report period. Independent of the 9 ms sensor sampling interval. */
+#define REPORT_INTERVAL_MS 100
 
-static void check_calibration(){
+/* UART commands. */
+#define CMD_NEXT_POSE 'n'
+#define CMD_CALIBRATE 'c'
 
-}
 
 static void accel_thread(void *p1, void *p2, void *p3)
 {
-	ARG_UNUSED(p1);
-	ARG_UNUSED(p2);
-	ARG_UNUSED(p3);
+	ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
 
 	printk("INIT MPU\n");
 
@@ -44,30 +45,39 @@ static void calibration_thread(void *p1, void *p2, void *p3)
 	struct accel_calibration cal;
 	int rc;
 
-	ARG_UNUSED(p1);
-	ARG_UNUSED(p2);
-	ARG_UNUSED(p3);
+	ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
 
-	printk("entering calibration\n");
-
-	rc = calibration_run(&cal);
-	if (rc != 0) {
-		printk("calibration failed: %d\n", rc);
-		return;
+	/*
+	 * A stored calibration means no six-point routine is needed at boot.
+	 * Anything else -- never written, wrong version, corrupt -- is treated
+	 * the same way: calibrate now and write the result.
+	 */
+	rc = storage_load_calibration(&cal);
+	if (rc == 0) {
+		set_calibration(&cal);
+		printk("calibration: loaded from flash, send '%c' to redo\n",
+		       CMD_CALIBRATE);
+	} else {
+		printk("calibration: none stored (%d), starting one\n", rc);
+		calibration_request();
 	}
 
-	rc = storage_store_calibration(&cal);
-	if (rc == -ENOSYS) {
-		printk("calibration: not persisted, values are lost on reset\n");
-	} else if (rc != 0) {
-		printk("calibration: store failed: %d\n", rc);
-	}
+	while (1) {
+		calibration_wait();
 
-	if(get_calibration()){
-		while(1){
-			get_calibrated_values();
+		rc = calibration_run(&cal);
+		if (rc != 0) {
+			printk("calibration failed: %d\n", rc);
+			continue;
 		}
 
+		rc = storage_store_calibration(&cal);
+		if (rc != 0) {
+			printk("calibration: store failed: %d, "
+			       "values are lost on reset\n", rc);
+		} else {
+			printk("calibration: stored to flash\n");
+		}
 	}
 }
 
@@ -75,9 +85,7 @@ static void command_thread(void *p1, void *p2, void *p3)
 {
 	char command[UART_CMD_MAX_LEN];
 
-	ARG_UNUSED(p1);
-	ARG_UNUSED(p2);
-	ARG_UNUSED(p3);
+	ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
 
 	if (uart_cmd_init() != 0) {
 		return;
@@ -89,9 +97,13 @@ static void command_thread(void *p1, void *p2, void *p3)
 		}
 
 		switch (command[0]) {
-		case 'n':
+		case CMD_NEXT_POSE:
 			/* operator confirmed the current calibration pose */
 			calibration_advance();
+			break;
+		case CMD_CALIBRATE:
+			/* recalibrate and overwrite whatever is in flash */
+			calibration_request();
 			break;
 		default:
 			printk("unknown command: %s\n", command);
@@ -106,7 +118,24 @@ int main(void)
 		printk("continuing without persistent storage\n");
 	}
 
-	return 0;
+	/*
+	 * Sole owner of the per-sample console output. Reporting from here
+	 * rather than inside accel.c decouples the print rate from the sample
+	 * rate, and keeps accel.c independent of calibration.c -- the sensor
+	 * layer has no reason to know whether a calibration exists.
+	 */
+	while (1) {
+		struct accel_sample s;
+
+		if (accel_get_latest(&s) == 0) {
+			bool cal = calibration_apply_active(&s) == 0;
+
+			printk("[%s] [%f] [%f] [%f] g\n", cal ? "CAL" : "RAW",
+			       (double)s.x, (double)s.y, (double)s.z);
+		}
+
+		k_sleep(K_MSEC(REPORT_INTERVAL_MS));
+	}
 }
 
 K_THREAD_DEFINE(accel_tid, STACKSIZE_MPU, accel_thread, NULL, NULL, NULL,

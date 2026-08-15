@@ -22,6 +22,12 @@
 static K_SEM_DEFINE(orientation_sem, 0, 1);
 
 /*
+ * Given when a calibration is wanted: once at boot if flash held nothing, and
+ * again whenever the operator asks for one. Taken by calibration_wait().
+ */
+static K_SEM_DEFINE(start_sem, 0, 1);
+
+/*
  * Readings captured in each orientation. Orientation i is the one where axis
  * (i % CAL_AXES) is aligned with gravity, pointing up for i < CAL_AXES and
  * down for i >= CAL_AXES.
@@ -44,6 +50,16 @@ static const char *const orientation_name[CAL_ORIENTATIONS] = {
 void calibration_advance(void)
 {
 	k_sem_give(&orientation_sem);
+}
+
+void calibration_request(void)
+{
+	k_sem_give(&start_sem);
+}
+
+void calibration_wait(void)
+{
+	k_sem_take(&start_sem, K_FOREVER);
 }
 int get_calibration(void)
 {
@@ -162,41 +178,22 @@ int calibration_run(struct accel_calibration *out)
 	return 0;
 }
 
-// when eeprom is not empty this has to run to get and set the calibration values
-int set_calibration(struct accel_calibration *out)
+/* Adopt a calibration read back from flash, skipping the six-point routine. */
+int set_calibration(const struct accel_calibration *cal)
 {
-	/* TODO: placeholders until storage_load_calibration() exists. */
-	const float scale[CAL_AXES]  = {1.0f, 1.0f, 1.0f};
-	const float offset[CAL_AXES] = {0.0f, 0.0f, 0.0f};
-
-	/* Arrays are not assignable in C; copy element-wise. */
-	for (int i = 0; i < CAL_AXES; i++) {
-		out->offset[i] = offset[i];
-		out->scale[i] = scale[i];
-	}
-
-	active = *out;
+	active = *cal;
 	calibrated = true;
 
 	return 0;
 }
 
-int get_calibrated_values(void)
+int calibration_apply_active(struct accel_sample *s)
 {
-	struct accel_sample s;
-	int rc;
-
-	if (!get_calibration()) {
+	if (!calibrated) {
 		return -EAGAIN;
 	}
 
-	rc = accel_get_latest(&s);
-	if (rc != 0) {
-		return rc;
-	}
-
-	calibration_apply(&active, &s);
-	printk("[CAL] [%f] [%f] [%f] g\n", (double)s.x, (double)s.y, (double)s.z);
+	calibration_apply(&active, s);
 
 	return 0;
 }

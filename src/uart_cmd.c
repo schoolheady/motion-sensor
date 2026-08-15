@@ -28,8 +28,7 @@ static void serial_cb(const struct device *dev, void *user_data)
 {
 	uint8_t c;
 
-	ARG_UNUSED(dev);
-	ARG_UNUSED(user_data);
+	ARG_UNUSED(dev); ARG_UNUSED(user_data);
 
 	uart_irq_update(uart_dev);
 
